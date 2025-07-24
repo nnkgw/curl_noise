@@ -51,8 +51,8 @@ const float height_limit = 3.0f;
 void initParticles() {
   particles.clear();
   for (int i = 0; i < MAX_PARTICLES; ++i) {
-    float x = ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f;
-    float z = ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f;
+    float x = ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.1f;
+    float z = ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.1f;
     float y = (std::rand() % 1000) / 1000.0f * 0.5f;
     particles.emplace_back(glm::vec3(x, y, z));
   }
@@ -108,9 +108,9 @@ void updateParticles() {
 
     if (p.pos.y > height_limit || glm::length(p.pos) > 5.0f) {
       p.pos = p.prev = glm::vec3(
-        ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f,
+        ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.1f,
         0.0f,
-        ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f);
+        ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.1f);
     }
   }
 }
