@@ -25,13 +25,13 @@
 #include <cmath>
 #include <iostream>
 
-// Fixed sphere position
+// Sphere (center of vortex)
 glm::vec3 ballPos(0.0f, 1.0f, 0.0f);
 const float radius = 0.3f;
 
 // Camera control
-float camTheta = 0.0f; // Azimuth
-float camPhi = 30.0f;  // Elevation
+float camTheta = 0.0f;
+float camPhi = 30.0f;
 int lastX, lastY;
 bool rotating = false;
 
@@ -47,7 +47,7 @@ const int MAX_PARTICLES = 1000;
 const float gravity = -0.2f;
 const float height_limit = 3.0f;
 
-// Initialize particle field
+// Initialize random particle positions near the bottom
 void initParticles() {
   particles.clear();
   for (int i = 0; i < MAX_PARTICLES; ++i) {
@@ -58,7 +58,19 @@ void initParticles() {
   }
 }
 
-// Curl noise based velocity field
+// Generate a vortex vector field centered around the sphere
+glm::vec3 vortexFlow(glm::vec3 p) {
+  glm::vec3 rel = p - ballPos;
+  glm::vec2 r(rel.x, rel.z);
+  float d = glm::length(r);
+  if (d < 1e-3f) return glm::vec3(0, 1, 0);
+  glm::vec2 swirl(-r.y, r.x); // perpendicular in XZ
+  swirl = glm::normalize(swirl);
+  glm::vec3 v(swirl.x, 1.0f, swirl.y);
+  return glm::normalize(v) * 1.2f;
+}
+
+// (Optional) Add curl noise to enhance flow naturalness
 glm::vec3 curlNoise(float x, float z, float t) {
   float eps = 0.1f;
   float n1 = glm::perlin(glm::vec3(x, 0.0f, z + eps + t));
@@ -70,16 +82,17 @@ glm::vec3 curlNoise(float x, float z, float t) {
   float dx = (n3 - n4) / (2.0f * eps);
 
   glm::vec3 v(dx, 1.0f, -dy);
-  return glm::normalize(v) * 1.5f;
+  return glm::normalize(v) * 0.3f; // reduced strength
 }
 
-// Update particle positions and handle sphere collision
+// Particle update: vortex flow + optional noise + sliding on sphere
 void updateParticles() {
   float time = glutGet(GLUT_ELAPSED_TIME) * 0.001f;
   for (auto& p : particles) {
     p.prev = p.pos;
 
-    glm::vec3 flow = curlNoise(p.pos.x, p.pos.z, time);
+    glm::vec3 flow = vortexFlow(p.pos);
+    flow += curlNoise(p.pos.x, p.pos.z, time);
     flow.y += gravity;
 
     glm::vec3 toCenter = p.pos - ballPos;
@@ -113,7 +126,7 @@ void drawGround() {
   glEnd();
 }
 
-// Draw particles as flow lines
+// Draw flow lines as short trails
 void drawParticles() {
   glColor3f(0.0f, 0.0f, 0.0f);
   glBegin(GL_LINES);
@@ -124,7 +137,7 @@ void drawParticles() {
   glEnd();
 }
 
-// Render callback
+// Main display callback
 void display() {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glLoadIdentity();
@@ -137,7 +150,6 @@ void display() {
 
   drawGround();
 
-  // Draw sphere
   glPushMatrix();
   glTranslatef(ballPos.x, ballPos.y, ballPos.z);
   glColor3f(0.9f, 0.8f, 0.2f);
@@ -148,13 +160,13 @@ void display() {
   glutSwapBuffers();
 }
 
-// Idle update
+// Idle callback
 void idle() {
   updateParticles();
   glutPostRedisplay();
 }
 
-// Window reshape
+// Window resize
 void reshape(int w, int h) {
   glViewport(0, 0, w, h);
   glMatrixMode(GL_PROJECTION);
@@ -163,7 +175,7 @@ void reshape(int w, int h) {
   glMatrixMode(GL_MODELVIEW);
 }
 
-// Mouse button callback
+// Mouse button
 void mouse(int button, int state, int x, int y) {
   if (button == GLUT_LEFT_BUTTON) {
     rotating = (state == GLUT_DOWN);
@@ -172,7 +184,7 @@ void mouse(int button, int state, int x, int y) {
   }
 }
 
-// Mouse motion callback
+// Mouse drag
 void motion(int x, int y) {
   if (rotating) {
     camTheta += (x - lastX) * 0.5f;
@@ -191,11 +203,12 @@ void init() {
   initParticles();
 }
 
+// Entry point
 int main(int argc, char** argv) {
   glutInit(&argc, argv);
   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
   glutInitWindowSize(800, 600);
-  glutCreateWindow("Curl-Noise Flow Simulation");
+  glutCreateWindow("Curl-Noise");
 
   init();
   glutDisplayFunc(display);
