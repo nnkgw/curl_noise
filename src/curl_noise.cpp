@@ -85,13 +85,42 @@ glm::vec3 curlNoise(float x, float z, float t) {
   return glm::normalize(v) * 0.3f; // reduced strength
 }
 
+
+// Vector potential field psi(p): Eq.1 in Bridson SIGGRAPH 2007
+glm::vec3 potential(glm::vec3 p) {
+  float scale = 0.5f;
+  float psi1 = glm::perlin(p * scale + glm::vec3(31.416f, 0.0f, 47.853f));
+  float psi2 = glm::perlin(p * scale + glm::vec3(0.0f, 19.943f, 12.345f));
+  float psi3 = glm::perlin(p * scale + glm::vec3(3.142f, 1.618f, 2.718f));
+  return glm::vec3(psi1, psi2, psi3);
+}
+
+// Curl of vector potential psi(p) using central differences
+glm::vec3 curl(glm::vec3 p) {
+  float eps = 0.01f;
+
+  float dpsi3_dy = (potential(p + glm::vec3(0, eps, 0)).z - potential(p - glm::vec3(0, eps, 0)).z) / (2.0f * eps);
+  float dpsi2_dz = (potential(p + glm::vec3(0, 0, eps)).y - potential(p - glm::vec3(0, 0, eps)).y) / (2.0f * eps);
+  float dpsi1_dz = (potential(p + glm::vec3(0, 0, eps)).x - potential(p - glm::vec3(0, 0, eps)).x) / (2.0f * eps);
+  float dpsi3_dx = (potential(p + glm::vec3(eps, 0, 0)).z - potential(p - glm::vec3(eps, 0, 0)).z) / (2.0f * eps);
+  float dpsi2_dx = (potential(p + glm::vec3(eps, 0, 0)).y - potential(p - glm::vec3(eps, 0, 0)).y) / (2.0f * eps);
+  float dpsi1_dy = (potential(p + glm::vec3(0, eps, 0)).x - potential(p - glm::vec3(0, eps, 0)).x) / (2.0f * eps);
+
+  return glm::vec3(
+    dpsi3_dy - dpsi2_dz,
+    dpsi1_dz - dpsi3_dx,
+    dpsi2_dx - dpsi1_dy
+  );
+}
+
+
 // Particle update: vortex flow + optional noise + sliding on sphere
 void updateParticles() {
   float time = glutGet(GLUT_ELAPSED_TIME) * 0.001f;
   for (auto& p : particles) {
     p.prev = p.pos;
 
-    glm::vec3 flow = vortexFlow(p.pos);
+    glm::vec3 flow = curl(p.pos);
     flow += curlNoise(p.pos.x, p.pos.z, time);
     flow.y += gravity;
 
