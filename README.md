@@ -1,2 +1,2 @@
-# curl_noise
-Unofficial implementation of "Curl-Noise for Procedural Fluid Flow" (SIGGRAPH 2007)
+# constraint_bundles
+A minimal XPBD benchmark framework exploring grouped constraint solving for improved performance and stability.
