@@ -21,26 +21,48 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/noise.hpp>
+#include <vector>
 #include <cmath>
 #include <iostream>
 
-// Sphere
-glm::vec3 ballPos(0.0f, 0.2f, 0.0f);
-glm::vec3 ballVel(0.0f);
-const float radius = 0.2f;
-const float gravity = -0.5f;
-const float dt = 0.016f;
+// Fixed sphere position
+glm::vec3 ballPos(0.0f, 1.0f, 0.0f);
+const float radius = 0.3f;
 
-// Camera
-float camTheta = 0.0f;   // Horizontal rotation
-float camPhi = 30.0f;    // Elevation angle
+// Camera control
+float camTheta = 0.0f; // Azimuth
+float camPhi = 30.0f;  // Elevation
 int lastX, lastY;
 bool rotating = false;
 
+// Particle structure
+struct Particle {
+  glm::vec3 pos, prev;
+  Particle(glm::vec3 p) : pos(p), prev(p) {}
+};
+std::vector<Particle> particles;
+
+const float dt = 0.016f;
+const int MAX_PARTICLES = 1000;
+const float gravity = -0.2f;
+const float height_limit = 3.0f;
+
+// Initialize particle field
+void initParticles() {
+  particles.clear();
+  for (int i = 0; i < MAX_PARTICLES; ++i) {
+    float x = ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f;
+    float z = ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f;
+    float y = (std::rand() % 1000) / 1000.0f * 0.5f;
+    particles.emplace_back(glm::vec3(x, y, z));
+  }
+}
+
+// Curl noise based velocity field
 glm::vec3 curlNoise(float x, float z, float t) {
   float eps = 0.1f;
-  float n1 = glm::perlin(glm::vec3(x,     0.0f, z + eps + t));
-  float n2 = glm::perlin(glm::vec3(x,     0.0f, z - eps + t));
+  float n1 = glm::perlin(glm::vec3(x, 0.0f, z + eps + t));
+  float n2 = glm::perlin(glm::vec3(x, 0.0f, z - eps + t));
   float n3 = glm::perlin(glm::vec3(x + eps, 0.0f, z + t));
   float n4 = glm::perlin(glm::vec3(x - eps, 0.0f, z + t));
 
@@ -51,56 +73,88 @@ glm::vec3 curlNoise(float x, float z, float t) {
   return glm::normalize(v) * 1.5f;
 }
 
-void update() {
+// Update particle positions and handle sphere collision
+void updateParticles() {
   float time = glutGet(GLUT_ELAPSED_TIME) * 0.001f;
-  glm::vec3 flow = curlNoise(ballPos.x, ballPos.z, time);
-  ballVel += flow * dt;
-  ballVel.y += gravity * dt;
-  ballPos += ballVel * dt;
+  for (auto& p : particles) {
+    p.prev = p.pos;
 
-  if (ballPos.y < radius) {
-    ballPos.y = radius;
-    if (ballVel.y < 0.0f) ballVel.y *= -0.3f;
+    glm::vec3 flow = curlNoise(p.pos.x, p.pos.z, time);
+    flow.y += gravity;
+
+    glm::vec3 toCenter = p.pos - ballPos;
+    float dist = glm::length(toCenter);
+    if (dist < radius) {
+      glm::vec3 n = glm::normalize(toCenter);
+      glm::vec3 tangential = flow - glm::dot(flow, n) * n;
+      flow = glm::normalize(tangential) * glm::length(flow);
+      p.pos = ballPos + n * radius;
+    }
+
+    p.pos += flow * dt;
+
+    if (p.pos.y > height_limit || glm::length(p.pos) > 5.0f) {
+      p.pos = p.prev = glm::vec3(
+        ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f,
+        0.0f,
+        ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.8f);
+    }
   }
-
-  glutPostRedisplay();
 }
 
+// Draw ground plane
 void drawGround() {
-  glColor3f(0.1f, 0.1f, 0.1f);
+  glColor3f(0.9f, 0.9f, 0.95f);
   glBegin(GL_QUADS);
   glVertex3f(-2, 0, -2);
-  glVertex3f( 2, 0, -2);
-  glVertex3f( 2, 0,  2);
-  glVertex3f(-2, 0,  2);
+  glVertex3f(2, 0, -2);
+  glVertex3f(2, 0, 2);
+  glVertex3f(-2, 0, 2);
   glEnd();
 }
 
+// Draw particles as flow lines
+void drawParticles() {
+  glColor3f(0.0f, 0.0f, 0.0f);
+  glBegin(GL_LINES);
+  for (auto& p : particles) {
+    glVertex3fv(&p.prev.x);
+    glVertex3fv(&p.pos.x);
+  }
+  glEnd();
+}
+
+// Render callback
 void display() {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glLoadIdentity();
 
-  float r = 3.5f;
-  float eyeX = r * sinf(glm::radians(camTheta)) * cosf(glm::radians(camPhi));
-  float eyeY = r * sinf(glm::radians(camPhi));
-  float eyeZ = r * cosf(glm::radians(camTheta)) * cosf(glm::radians(camPhi));
-  gluLookAt(eyeX, eyeY, eyeZ, 0, 0.5, 0, 0, 1, 0);
+  float r = 4.0f;
+  float ex = r * sinf(glm::radians(camTheta)) * cosf(glm::radians(camPhi));
+  float ey = r * sinf(glm::radians(camPhi));
+  float ez = r * cosf(glm::radians(camTheta)) * cosf(glm::radians(camPhi));
+  gluLookAt(ex, ey, ez, 0, 1.0, 0, 0, 1, 0);
 
   drawGround();
 
+  // Draw sphere
   glPushMatrix();
   glTranslatef(ballPos.x, ballPos.y, ballPos.z);
-  glColor3f(0.8f, 0.3f, 0.3f);
+  glColor3f(0.9f, 0.8f, 0.2f);
   glutSolidSphere(radius, 32, 32);
   glPopMatrix();
 
+  drawParticles();
   glutSwapBuffers();
 }
 
+// Idle update
 void idle() {
-  update();
+  updateParticles();
+  glutPostRedisplay();
 }
 
+// Window reshape
 void reshape(int w, int h) {
   glViewport(0, 0, w, h);
   glMatrixMode(GL_PROJECTION);
@@ -109,6 +163,7 @@ void reshape(int w, int h) {
   glMatrixMode(GL_MODELVIEW);
 }
 
+// Mouse button callback
 void mouse(int button, int state, int x, int y) {
   if (button == GLUT_LEFT_BUTTON) {
     rotating = (state == GLUT_DOWN);
@@ -117,10 +172,11 @@ void mouse(int button, int state, int x, int y) {
   }
 }
 
+// Mouse motion callback
 void motion(int x, int y) {
   if (rotating) {
     camTheta += (x - lastX) * 0.5f;
-    camPhi   += (y - lastY) * 0.5f;
+    camPhi += (y - lastY) * 0.5f;
     camPhi = glm::clamp(camPhi, 5.0f, 85.0f);
     lastX = x;
     lastY = y;
@@ -128,16 +184,18 @@ void motion(int x, int y) {
   }
 }
 
+// OpenGL/GLUT init
 void init() {
   glEnable(GL_DEPTH_TEST);
-  glClearColor(0.9f, 0.9f, 0.95f, 1.0f);
+  glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+  initParticles();
 }
 
 int main(int argc, char** argv) {
   glutInit(&argc, argv);
   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
   glutInitWindowSize(800, 600);
-  glutCreateWindow("Curl-Noise");
+  glutCreateWindow("Curl-Noise Flow Simulation");
 
   init();
   glutDisplayFunc(display);
