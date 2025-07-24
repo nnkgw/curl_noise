@@ -114,17 +114,31 @@ glm::vec3 curl(glm::vec3 p) {
 }
 
 
-// Particle update: vortex flow + optional noise + sliding on sphere
 void updateParticles() {
   float time = glutGet(GLUT_ELAPSED_TIME) * 0.001f;
   for (auto& p : particles) {
     p.prev = p.pos;
 
-    glm::vec3 flow = curl(p.pos);
+    // Base upward flow
+    glm::vec3 baseFlow(0.0f, 1.0f, 0.0f);
+
+    // Swirl flow around sphere (in XZ plane)
+    glm::vec3 toCenter = p.pos - ballPos;
+    glm::vec2 r(toCenter.x, toCenter.z);
+    float d = glm::length(r);
+    glm::vec3 swirl(0.0f);
+    if (d > 1e-3f) {
+      glm::vec2 tangent(-r.y, r.x);
+      tangent = glm::normalize(tangent);
+      swirl = glm::vec3(tangent.x, 0.0f, tangent.y);
+    }
+
+    // Combine all
+    glm::vec3 flow = baseFlow + 0.6f * swirl;
     flow += curlNoise(p.pos.x, p.pos.z, time);
     flow.y += gravity;
 
-    glm::vec3 toCenter = p.pos - ballPos;
+    // Collision with sphere (tangential redirection)
     float dist = glm::length(toCenter);
     if (dist < radius) {
       glm::vec3 n = glm::normalize(toCenter);
@@ -133,8 +147,10 @@ void updateParticles() {
       p.pos = ballPos + n * radius;
     }
 
+    // Update particle
     p.pos += flow * dt;
 
+    // Reset if out of bounds
     if (p.pos.y > height_limit || glm::length(p.pos) > 5.0f) {
       p.pos = p.prev = glm::vec3(
         ((std::rand() % 2000) / 1000.0f - 1.0f) * 0.1f,
